@@ -65,7 +65,7 @@ def fetch_qt(codes):
                     p=line.split('"')[1].split('~')
                     if len(p)>48:
                         qt[p[2]]={'price':float(p[3]),'pe':float(p[39]) if p[39] else 0,'mktcap':float(p[44]),
-                                  'hi52':float(p[47]) if p[47] else 0,'lo52':float(p[48]) if p[48] else 0}
+                                  'hi52':float(p[67]) if p[67] else 0,'lo52':float(p[68]) if p[68] else 0}
         except: pass
     return qt
 
