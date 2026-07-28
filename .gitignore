@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 *.log
 tracking_report.md
+.idea/
