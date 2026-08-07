@@ -162,7 +162,23 @@ python3 scripts/websearch.py --fetch <URL> --max 5000       # 抓取网页正文
 
 > 0806实测结论: 扣非+OCF+增减持+质押明细均有可靠接口; 全市场质押率和ETF份额/资金流无可靠接口, 用逐股查询+websearch替代
 
-### 4.4 工具不可用时的退路
+### 4.4 新工具(0807从wechat-agent集成, 已实测) ⚠️需uv环境
+
+以下工具从 `Qiaorui/wechat-agent` 仓库集成, 需在本项目uv虚拟环境下运行(`uv run python3 scripts/xxx.py`):
+
+| 工具 | 功能 | 用法 | 实测 |
+|---|---|---|---|
+| **eniu_pe.py** | 亿牛网PE百分位(3/5/10年/全时间)+历史PE统计+ROE/毛利率/负债率/市值等 | `uv run python3 scripts/eniu_pe.py 600519 600150` | ✅ PE百分位+ROE/毛利率等全字段(沪市); 深市偶有超时 |
+| **ashare_data.py** | 实时行情+**5年财务数据**(收入/净利/ROE/EPS/增速)+搜索 | `uv run python3 scripts/ashare_data.py quote 600519`<br>`uv run python3 scripts/ashare_data.py financials 600519`<br>`uv run python3 scripts/ashare_data.py search 宁德时代` | ✅ 零依赖, 东方财富datacenter API |
+| **financial_rigor.py** | 数据严谨性验证: 三情景估值/交叉验证/估值验算/市值验算/Benford定律 | `uv run python3 scripts/financial_rigor.py three-scenario --price 35.18 --eps 1.24 --shares 63.27 --growth 0.25 0.12 0.0 --pe 30 22 15 --years 3`<br>`uv run python3 scripts/financial_rigor.py cross-validate --field "净利润" --values '{"源1": 78.48, "源2": 78.5}' --unit 亿` | ✅ 零依赖, 精确十进制 |
+
+> **eniu_pe.py vs quote.py --pb**: eniu给3/5/10年/全时间4个窗口的PE百分位+历史PE统计+ROE/毛利率等; quote.py给baidu PE分位(PB分位)+PB分位。两者互补: eniu看长期历史估值, quote.py给PB分位(baidu不提供的维度)。建议核心标的两个都拉做交叉验证。
+
+> **ashare_data.py financials 的价值**: 一次拉5年年报数据(收入/净利/ROE/EPS/增速), 适合做quality-screen去劣7条(原则7)中的ROE趋势/利润趋势判断。quote.py只给最新2个季度。
+
+> **financial_rigor.py three-scenario**: STEP3目标区定价的精确工具。输入乐观/中性/悲观增速和目标PE, 输出3年目标股价。替代原来的"PB分位50-70%对应价"估算。
+
+### 4.5 工具不可用时的退路
 - 金价: `curl -s https://gold-api.com/price`
 - 直接 `python3 -c "..."` 写一次性脚本调 腾讯/新浪/eastmoney API
 - akshare 库(已装)也可直接用
@@ -222,6 +238,10 @@ python3 scripts/websearch.py --fetch <URL> --max 5000       # 抓取网页正文
 
 【工具】(Bash 调用; 自带WebSearch/WebFetch对中文金融数据不可用, 必须用脚本)
 - 行情/估值/财务: python3 scripts/quote.py <6位代码> --pb --fin
+- PE百分位(3/5/10年, 交叉验证): uv run python3 scripts/eniu_pe.py <代码> (亿牛网, 给PE 3/5/10年/全时间百分位+ROE/毛利率/负债率等; 与quote.py PB分位互补)
+- 5年财务(ROE/净利/增速趋势): uv run python3 scripts/ashare_data.py financials <代码> (东方财富datacenter, 5年年报数据)
+- 三情景估值: uv run python3 scripts/financial_rigor.py three-scenario --price {价} --eps {EPS} --shares {股本亿} --growth {乐观} {中性} {悲观} --pe {乐观PE} {中性PE} {悲观PE} --years 3
+- 交叉验证: uv run python3 scripts/financial_rigor.py cross-validate --field "字段" --values '{"源1": 值, "源2": 值}' --unit 单位
 - 扣非净利+每股OCF: python3 -c "import akshare as ak; print(ak.stock_financial_abstract_ths(symbol='<代码>', indicator='按报告期').tail(5))"  (返回报告期/净利/扣非净利/扣非同比/每股经营现金流, ✅到2026Q1)
 - 质押明细: python3 -c "import akshare as ak; print(ak.stock_gpzy_individual_pledge_ratio_detail_em(symbol='<代码>'))"
 - 增减持: python3 -c "import akshare as ak; print(ak.stock_shareholder_change_ths(symbol='<代码>'))"  (✅到2025)
@@ -413,4 +433,4 @@ python3 scripts/websearch.py --fetch <URL> --max 5000       # 抓取网页正文
 
 ---
 
-*本手册由 2026-07-28 首次执行沉淀, v2更新 2026-08-06(+原则7治理质量/原则8现金流+非经常性/原则9不可验证信息处理, 产业链+集中度+产能周期, prompt模板11项要求)。方法论与原则来自用户反复强调的研究要求; 工具与执行模式来自实战验证; 踩坑经验来自实际遇到的问题。后续执行如遇新问题, 补充到第十节。*
+*本手册由 2026-07-28 首次执行沉淀, v2更新 2026-08-06(+原则7治理质量/原则8现金流+非经常性/原则9不可验证信息处理, 产业链+集中度+产能周期, prompt模板11项要求), v3更新 2026-08-07(+eniu_pe.py/ashare_data.py/financial_rigor.py工具链, 交叉验证规范, 去劣7条预筛引用)。方法论与原则来自用户反复强调的研究要求; 工具与执行模式来自实战验证; 踩坑经验来自实际遇到的问题。后续执行如遇新问题, 补充到第十节。*

@@ -43,17 +43,31 @@
 
 ### A. 每板块流程
 1. 候选挖掘: 从 Step1 报告核心标的 + 子方向龙头 + 近期消息催化标的, 列 5+ 候选
-2. **治理筛查(一票否决)**: 先查大股东质押率/近6月增减持/实控人/审计意见。质押>50%或大规模减持或实控人变更<1年→标"治理高风险"并从推荐池剔除(或降级至★★★最多)
-3. 数据: `quote.py v2 <代码> --pb --fin` 拉 PE/PB/PB分位/Q1同比/2025净利 + **扣非净利+OCF**(原则10)
-4. 多因子排序(各0-100):
-   - **PB分位 30%**(主锚, 历史相对, 不受高PE影响; 0-5%→90+, 80%+→<60)
+2. **去劣7条预筛(一票否决)** ⚠️(0807新增, 来自wechat-agent quality-screen): 用 `ashare_data.py financials` 拉5年数据, 逐条检查:
+   - ① 10年平均ROE < 8% → 排除(资本效率差)
+   - ② 5年累计自由现金流为负 → 排除(纸面富贵)
+   - ③ 利息覆盖倍数(EBIT/利息) < 2 → 排除(偿债风险; 银行/保险不适用)
+   - ④ 长期毛利率 < 15% → 排除(无定价权)
+   - ⑤ OCF/净利(5年均值) < 0.7 → 排除(**与原则8利润质量一致**)
+   - ⑥ 长期净利率 < 5% → 排除(抗风险差)
+   - ⑦ 5年股本膨胀 > 20%(非并购) → 排除(稀释股东)
+   - **豁免**: 战略投入期(上市<10年+毛利率>30%+OCF已正→豁免①); 高周转薄利(ROE>20%+OCF/NI>1.0+会员/平台模式→豁免④⑥)
+   - 数据源: `uv run python3 scripts/ashare_data.py financials <代码>`(5年ROE/净利/EPS/增速)
+3. **治理筛查(一票否决)**: 先查大股东质押率/近6月增减持/实控人/审计意见。质押>50%或大规模减持或实控人变更<1年→标"治理高风险"并从推荐池剔除(或降级至★★★最多)
+4. 数据: `quote.py v2 <代码> --pb --fin` 拉 PE/PB/PB分位/Q1同比/2025净利 + **扣非净利+OCF**(原则10) + `uv run python3 scripts/eniu_pe.py <代码>` 拉亿牛网PE百分位(3/5/10年/全时间, 与quote.py PB分位交叉验证)
+5. 多因子排序(各0-100):
+   - **PB分位 30%**(主锚, 历史相对, 不受高PE影响; 0-5%→90+, 80%+→<60; 用quote.py PB分位+eniu PE百分位交叉验证)
    - **业绩增速 15%**(Q1**扣非**同比+2026E增速, 成长兑现; 含大额非经常性→增速打折)
    - **PEG 10%**(PE/增速, <1→高分; 不用绝对PE, 用增速调整后的PE)
    - **阶段契合度 15%**(from Step2锚具体分值: 防御85-95/独立α70-80/周期底65-75/成长AI链30-45)
    - **行业地位/护城河/出海 10%**(龙头/壁垒/出海权重, 质量)
    - **治理质量 10%**(质押率<10%→90+; 10-30%→75; 30-50%→60; >50%→已一票否决; 近6月增持→+5; 大规模减持→-15)
    - **利润质量 10%**(OCF/净利>0.7→85+; 0.5-0.7→70; <0.5→55"利润质量存疑"; 扣非净利≈报表净利→+5; 大额非经常性→-15)
-5. 推荐top 2 + 给五点制买卖点
+6. 推荐top 2 + 给五点制买卖点
+7. **三情景估值验证目标价** ⚠️(0807新增): 对每只推荐股用 `financial_rigor.py three-scenario` 计算乐观/中性/悲观目标价, 与五点制目标区交叉验证:
+   - `uv run python3 scripts/financial_rigor.py three-scenario --price {现价} --eps {EPS} --shares {总股本亿} --growth {乐观} {中性} {悲观} --pe {乐观PE} {中性PE} {悲观PE} --years 3`
+   - 三情景目标价应在五点制目标区范围内; 偏差>30%需复核假设
+8. **交叉验证**(关键数据): 核心标的的净利/营收至少从2个源确认(quote.py + ashare_data.py financials + eniu_pe.py)。偏差>5%标"⚠️数据差异"
 
 ### B. 股票类型差异化分析(原则8) ⚠️
 
@@ -185,7 +199,7 @@ Step3独立选的 vs 2c点名的(格力/美的/海尔/招行/成都/紫金/赣�
 
 ## 八、执行流程
 
-1. **并行选股**: 派4个agent(每个3-4板块), 各自: 读Step1报告 + websearch近消息/国际/治理 + quote.py拉候选数据 → 治理筛查(一票否决) → 列5候选+7维度多因子排序(含治理/利润质量) → 标注股票类型(周期/成长/价值/事件) → 推荐top2+五点制买卖点+持仓全流程(加仓/减仓/止盈/时间止损) + 消息priced-in检查 → 对比2c。各agent写入 `_step3_batch<N>.md` 临时文件(分块写防截断: 每板块分析完即写)
+1. **并行选股**: 派4个agent(每个3-4板块), 各自: 读Step1报告 + 去劣7条预筛(ashare_data.py financials) + 治理筛查(akshare增减持/质押) + 多源数据(quote.py+eniu_pe.py+ths财务) → 交叉验证 → 7维度多因子排序 → 标注股票类型 → 推荐top2+五点制+持仓流程 → 三情景估值验证目标价 → 消息priced-in检查 → 对比2c。各agent写入 `_step3_batch<N>.md` 临时文件
 2. **合并到单文件**: 派agent(或主分析)把4个batch推导 + 综合汇总(32推荐+买卖点表+持仓流程+2c对比+情景+组合+风险约束+观察)整合到**一个自包含文件** `STEP3_个股选取.md`, 结构: §一32推荐+买卖点汇总表 / §二16板块完整推导(候选+排序+top2+买卖点+持仓流程+对比2c) / §三2c对比汇总 / §四前瞻情景 / §五组合落地+风险约束 / §六观察 / 附录方法论。去重(batch的重复preamble只放附录一次), 板块顺序统一
 3. **删临时文件**: 合并验证完整后, **删除 `_step3_batch1-4.md` 临时文件**(以及中间的综合文件), 只保留单一 `STEP3_个股选取.md`。⚠️最终交付是单文件, 不留散落batch
 4. **前瞻情景+组合落地+风险约束**: 主分析写4情景+组合调整+填配置框架+集中度检查(单股≤10%/单行业≤25%/周期股≤20%)+高相关对标注(可并入单文件§四§五)
@@ -209,19 +223,22 @@ Step3独立选的 vs 2c点名的(格力/美的/海尔/招行/成都/紫金/赣�
 ## 十、质量校验
 
 1. **板块覆盖**: 关注板块全覆盖(0728为16个), 每板块≥5候选
-2. **多因子非绝对PE**: 排序用PB分位+PEG+增速+阶段契合+地位+治理+利润质量(7维度), 不用绝对PE(查: 有无按PE高低直接筛的)
-3. **治理筛查**: 每只推荐标的有治理检查(质押率/增减持/实控人); 治理高风险→剔除或降级
-4. **利润质量**: 每只推荐标的有扣非净利+OCF vs 净利; 非经常性已标注; OCF<净利标"利润质量存疑"
-5. **股票类型标注**: 每只推荐标的标注类型(周期/成长/价值/事件), 按对应侧重分析(周期股有周期位置判断)
-6. **五点制+持仓流程齐全**: 每推荐股有建仓区+止损+目标区+加仓规则+减仓止盈规则+时间止损
-7. **消息priced-in**: 推荐股检查"核心利好/利空是否已在股价反映"(52周位+近期涨跌)
-8. **对比2c**: 有Step3选 vs 2c的对比+差异原因
-9. **前瞻情景**: 4情景有触发信号+组合调整
-10. **组合落地+风险约束**: 填了Step2配置框架+具体权重, 加总100%; 单股≤10%/单行业≤25%/周期股≤20%集中度检查通过; 高相关对已列出
-11. **算术**: 多因子加权分=各维度加权求和一致
-12. **纯客观**: 无用户持仓(华友/天齐/黄金ETF)介入
-13. **单文件自包含**⚠️: 最终交付为单一 `STEP3_个股选取.md`, 无 `_step3_batch*.md` 临时文件遗留; 文件内"见batch"引用已更新为内部章节引用
-14. **不可验证信息**: 推荐逻辑不依赖搜不到/未核实的传闻; 传闻仅作"情景参考"标"待核实"
+2. **去劣7条**: 每只推荐标的通过quality-screen去劣7条(或标注豁免条款)
+3. **多因子非绝对PE**: 排序用PB分位+PEG+增速+阶段契合+地位+治理+利润质量(7维度), 不用绝对PE(查: 有无按PE高低直接筛的)
+4. **治理筛查**: 每只推荐标的有治理检查(质押率/增减持/实控人); 治理高风险→剔除或降级
+5. **利润质量**: 每只推荐标的有扣非净利+OCF vs 净利; 非经常性已标注; OCF<净利标"利润质量存疑"
+6. **股票类型标注**: 每只推荐标的标注类型(周期/成长/价值/事件), 按对应侧重分析(周期股有周期位置判断)
+7. **五点制+持仓流程齐全**: 每推荐股有建仓区+止损+目标区+加仓规则+减仓止盈规则+时间止损
+8. **三情景估值验证**: 每只推荐目标价经financial_rigor.py三情景计算, 与五点制目标区偏差<30%
+9. **交叉验证**: 核心标的净利/营收从≥2个源确认(quote.py+ashare_data+eniu_pe), 偏差>5%已标"⚠️数据差异"
+10. **消息priced-in**: 推荐股检查"核心利好/利空是否已在股价反映"(52周位+近期涨跌)
+11. **对比2c**: 有Step3选 vs 2c的对比+差异原因
+12. **前瞻情景**: 4情景有触发信号+组合调整
+13. **组合落地+风险约束**: 填了Step2配置框架+具体权重, 加总100%; 单股≤10%/单行业≤25%/周期股≤20%集中度检查通过; 高相关对已列出
+14. **算术**: 多因子加权分=各维度加权求和一致
+15. **纯客观**: 无用户持仓(华友/天齐/黄金ETF)介入
+16. **单文件自包含**⚠️: 最终交付为单一 `STEP3_个股选取.md`, 无 `_step3_batch*.md` 临时文件遗留
+17. **不可验证信息**: 推荐逻辑不依赖搜不到/未核实的传闻; 传闻仅作"情景参考"标"待核实"
 
 ---
 
@@ -240,22 +257,35 @@ Step3独立选的 vs 2c点名的(格力/美的/海尔/招行/成都/紫金/赣�
 
 【每板块流程】
 1. 候选挖掘: 从Step1报告(reports_{日期}/{板块}.md)核心标的+子方向龙头+近期消息催化, 列≥5候选。独立选, 不限于2c。
-2. 治理筛查(一票否决): python3 -c "import akshare as ak; print(ak.stock_shareholder_change_ths(symbol='<代码>'))"(查近6月增减持); python3 -c "import akshare as ak; print(ak.stock_gpzy_individual_pledge_ratio_detail_em(symbol='<代码>'))"(查质押明细)。质押>50%/大规模减持(占流通>3%)/实控人变更<1年/财务造假→标"治理高风险"剔除或降级。补充websearch搜"XX 质押 减持 实控人"。
-3. 数据: cd /Users/qiaorui/workspace/token_price && python3 scripts/quote.py <代码列表> --pb --fin (PE/PB/PB分位/Q1同比/2025净利/52周高低)。再用 python3 -c "import akshare as ak; print(ak.stock_financial_abstract_ths(symbol='<代码>', indicator='按报告期').tail(5))" 拉**扣非净利+每股经营现金流**(利润质量判断)
-4. 多因子排序(综合分=加权): PB分位30%(主锚,0-5%→90+,80%+→<60)+业绩增速15%(Q1**扣非**同比,含非经常性→打折)+PEG10%(PE/增速,<1高分)+阶段契合度15%(用Step2具体分值)+行业地位/出海10%+治理质量10%(质押率+增减持)+利润质量10%(OCF/净利比,扣非≈报表→加分)
-5. **股票类型标注**: 每只推荐标的标注类型(周期/成长/价值/事件)。周期股额外写"当前周期位置判断"(价格/库存/产能利用率/订单可见度)
-6. 推荐top2 + 五点制+持仓流程: 建仓区[low,high]+目标区[low,high]+止损+加仓规则(30/30/40分批)+减仓止盈(到目标low减1/3,到high再减1/3,剩余移动止盈8%回撤)+时间止损(60日不动审查逻辑)
-7. **消息priced-in检查**: 核心利好/利空是否已在股价反映(52周位+近30日涨跌)
-8. 对比2c: 共识/替换/新增+原因
+2. **去劣7条预筛**: uv run python3 scripts/ashare_data.py financials <代码>(拉5年ROE/净利/增速)。逐条检查: 10年均ROE<8%/5年累计FCF负/利息覆盖<2/毛利率<15%/OCF净利<0.7/净利率<5%/5年股本膨胀>20% → 排除(豁免条款见手册§三A)。
+3. 治理筛查(一票否决): uv run python3 -c "import akshare as ak; print(ak.stock_shareholder_change_ths(symbol='<代码>'))"(查近6月增减持); 质押明细同理。质押>50%/大规模减持/实控人变更<1年→剔除。补充websearch搜"XX 质押 减持 实控人"。
+4. 数据(多源): cd /Users/qiaorui/workspace/token_price && (a) python3 scripts/quote.py <代码列表> --pb --fin (PE/PB/PB分位/Q1同比/净利/52周高低); (b) uv run python3 scripts/eniu_pe.py <代码列表> (PE百分位3/5/10年/全时间+ROE/毛利率/负债率/市值); (c) python3 -c "import akshare as ak; print(ak.stock_financial_abstract_ths(symbol='<代码>', indicator='按报告期').tail(5))" (扣非净利+每股OCF)。**交叉验证**: 净利/营收从quote.py+eniu+ths至少2源确认, 偏差>5%标"⚠️数据差异"。
+5. 多因子排序(综合分=加权): PB分位30%(主锚, quote.py PB分位+eniu PE百分位交叉验证)+业绩增速15%(Q1扣非同比)+PEG10%+阶段契合度15%(用Step2具体分值)+行业地位/出海10%+治理质量10%+利润质量10%
+6. **股票类型标注**: 每只推荐标的标注类型(周期/成长/价值/事件)。周期股额外写"当前周期位置判断"
+7. 推荐top2 + 五点制+持仓流程: 建仓区[low,high]+目标区[low,high]+止损+加仓(30/30/40)+减仓止盈+时间止损(60日)
+8. **三情景估值验证目标价**: uv run python3 scripts/financial_rigor.py three-scenario --price {现价} --eps {EPS} --shares {总股本亿} --growth {乐观} {中性} {悲观} --pe {乐观PE} {中性PE} {悲观PE} --years 3。三情景目标价应在五点制目标区范围内; 偏差>30%需复核假设。
+9. **消息priced-in检查**: 核心利好/利空是否已在股价反映(52周位+近30日涨跌)
+10. 对比2c: 共识/替换/新增+原因
 
 【A股PE】不按绝对PE排序(A股只做多PE普遍高), 用PB分位主锚+PEG+增速。高PE但高增速+低PB分位仍可推荐; 低PE但逻辑证伪不推荐。
 
 【不可验证信息】搜不到的传闻/小道消息不做推荐依据, 仅标"待核实, 情景参考"。推荐逻辑必须基于可验证数据。
 
-【工具】Bash: python3 scripts/quote.py <代码> --pb --fin; python3 -c "import akshare as ak; print(ak.stock_financial_abstract_ths(symbol='<代码>', indicator='按报告期').tail(5))"(扣非净利+每股OCF ✅到2026Q1); python3 -c "import akshare as ak; print(ak.stock_shareholder_change_ths(symbol='<代码>'))"(增减持 ✅到2025); python3 -c "import akshare as ak; print(ak.stock_gpzy_individual_pledge_ratio_detail_em(symbol='<代码>'))"(质押明细); python3 scripts/websearch.py "查询词" --top 10; python3 scripts/websearch.py --fetch <URL>。新浪K线(如需MA60/250): curl -s "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh600519&scale=240&datalen=260"。自带WebSearch/WebFetch不可用。
+【工具】⚠️新工具需uv run前缀。Bash:
+- 行情/PB分位: python3 scripts/quote.py <代码> --pb --fin
+- PE百分位(3/5/10年): uv run python3 scripts/eniu_pe.py <代码> (亿牛网, 与quote.py交叉验证)
+- 5年财务(去劣用): uv run python3 scripts/ashare_data.py financials <代码> (ROE/净利/增速/EPS)
+- 三情景估值: uv run python3 scripts/financial_rigor.py three-scenario --price {价} --eps {EPS} --shares {股本亿} --growth {乐观} {中性} {悲观} --pe {乐观PE} {中性PE} {悲观PE} --years 3
+- 交叉验证: uv run python3 scripts/financial_rigor.py cross-validate --field "净利润" --values '{"源1": 值, "源2": 值}' --unit 亿
+- 扣非+OCF: python3 -c "import akshare as ak; print(ak.stock_financial_abstract_ths(symbol='<代码>', indicator='按报告期').tail(5))"
+- 增减持: python3 -c "import akshare as ak; print(ak.stock_shareholder_change_ths(symbol='<代码>'))"
+- 质押明细: python3 -c "import akshare as ak; print(ak.stock_gpzy_individual_pledge_ratio_detail_em(symbol='<代码>'))"
+- 新闻: python3 scripts/websearch.py "查询词" --top 10
+- 新浪K线(MA/52周): curl -s "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh600519&scale=240&datalen=260"
+- 自带WebSearch/WebFetch不可用
 
-【输出】_step3_batch{N}.md, 每板块: 候选表(候选|代码|PE|PB|PB分位|扣非Q1同比|PEG|阶段契合|地位|治理|利润质量|综合分,降序)+top2(代码+一句话+类型+五点制买卖点+持仓流程+消息priced-in)+对比2c。
-最终回复只返回: 各板块top2(代码+一句话+类型+买卖点简版)+与2c差异。不返回全文。
+【输出】_step3_batch{N}.md, 每板块: 候选表(候选|代码|PE|PB|PB分位|eniu PE分位10年|扣非Q1同比|PEG|阶段契合|地位|治理|利润质量|综合分,降序)+去劣结果(通过/排除/豁免)+top2(代码+一句话+类型+五点制买卖点+三情景目标价+持仓流程+消息priced-in)+交叉验证(净利偏差)+对比2c。
+最终回复只返回: 各板块top2(代码+一句话+类型+买卖点简版+三情景目标价)+与2c差异。不返回全文。
 ```
 
 **模板要点**:
@@ -271,4 +301,4 @@ Step3独立选的 vs 2c点名的(格力/美的/海尔/招行/成都/紫金/赣�
 
 ---
 
-*本手册编制 2026-07-28, v2更新 2026-08-06(+治理/现金流/非经常性/股票类型框架/消息priced-in/持仓全流程/组合风险约束)。Step3 是落地层: Step2选对板块后, 在板块内独立精选个股+给买卖点+持仓流程+风险约束+前瞻情景应对, 完成从研究到操作的闭环。下次说"参考 STEP3 选个股"即按此复现。*
+*本手册编制 2026-07-28, v2更新 2026-08-06(+治理/现金流/非经常性/股票类型框架/消息priced-in/持仓全流程/组合风险约束), v3更新 2026-08-07(+去劣7条预筛/三情景估值验证/交叉验证/亿牛网PE百分位/ashare_data 5年财务/financial_rigor工具链)。Step3 是落地层: Step2选对板块后, 在板块内独立精选个股+去劣+多因子+三情景+买卖点+持仓流程+风险约束, 完成从研究到操作的闭环。下次说"参考 STEP3 选个股"即按此复现。*

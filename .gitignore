@@ -5,3 +5,4 @@ __pycache__/
 *.log
 tracking_report.md
 .idea/
+.venv/
